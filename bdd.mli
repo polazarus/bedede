@@ -19,6 +19,9 @@ module type Params = sig
   (** Size of [vars]'s cache *)
   val vars_cache_size : int
 
+  (** Size of [all_sat]'s cache *)
+  val all_sat_cache_size : int
+
   (** Size of [restrict]'s cache *)
   val restrict_cache_size : int
 
@@ -33,6 +36,9 @@ module type Params = sig
 
   (** Should cache be thrown away between two calls to [restrict v x] for some [v]-[x] *)
   val restrict_cache_throwaway : bool
+
+  (** Should cache be thrown away between two calls to [all_sat] *)
+  val all_sat_cache_throwaway : bool
 
 end
 
@@ -103,4 +109,25 @@ module Make (Var : Var) (P : Params) : sig
   (** Compute Shannon's co-factor for the given variable-value,
       that is, replace a variable by some constant *)
   val restrict : Var.t -> bool -> t -> t
+
+  (** A valid assignment. Raise [Not_found] if none. *)
+  val any_sat : t -> (Var.t * bool) list
+
+  (** A random valid assignment. Raise [Not_found] if none. *)
+  val random_stat : t -> (Var.t * bool) list
+
+  (** All valid assignment, i.e. DNF *)
+  val all_sat : t -> (Var.t * bool) list list
+
+  (** Iterate on all valid assignement *)
+  val iter_sat : ((Var.t * bool) list -> unit) -> t -> unit
+
+  (** Find exists *)
+  val exists_sat : ((Var.t * bool) list -> bool) -> t -> bool
+
+  (** Is satisfiable *)
+  val is_sat : t -> bool
+
+  (** Is tautology *)
+  val is_tauto : t -> bool
 end

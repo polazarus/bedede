@@ -19,6 +19,9 @@ module type Params = sig
   (** Size of [vars]'s cache *)
   val vars_cache_size : int
 
+  (** Size of [all_sat]'s cache *)
+  val all_sat_cache_size : int
+
   (** Size of [restrict]'s cache *)
   val restrict_cache_size : int
 
@@ -33,6 +36,9 @@ module type Params = sig
 
   (** Should cache be thrown away between two calls to [restrict v x] for some [v]-[x] *)
   val restrict_cache_throwaway : bool
+
+  (** Should cache be thrown away between two calls to [all_sat] *)
+  val all_sat_cache_throwaway : bool
 
 end
 
@@ -176,22 +182,22 @@ module Make (V : Var) (P : Params) = struct
     let z_ = app1 (t00, t01) and o_ = app1 (t10, t11)
     and _z = app1 (t00, t10) and _o = app1 (t01, t11) in
     let app app = function
-    | Zero, Zero -> zz
-    | Zero, One -> zo
-    | One, Zero -> oz
-    | One, One -> oo
-    | Zero, x -> z_ x
-    | One, x ->  o_ x
-    | x, Zero -> _z x
-    | x, One -> _o x
-    | (Node (_, v1, l1, h1) as n1), (Node (_, v2, l2, h2) as n2) ->
-      let cmp = V.compare v1 v2 in
-      if cmp < 0 then
-        make v1 (app (l1, n2)) (app (h1, n2))
-      else if cmp = 0 then
-        make v1 (app (l1, l2)) (app (h1, h2))
-      else
-        make v2 (app (n1, l2)) (app (n1, h2))
+      | Zero, Zero -> zz
+      | Zero, One -> zo
+      | One, Zero -> oz
+      | One, One -> oo
+      | Zero, x -> z_ x
+      | One, x ->  o_ x
+      | x, Zero -> _z x
+      | x, One -> _o x
+      | (Node (_, v1, l1, h1) as n1), (Node (_, v2, l2, h2) as n2) ->
+        let cmp = V.compare v1 v2 in
+        if cmp < 0 then
+          make v1 (app (l1, n2)) (app (h1, n2))
+        else if cmp = 0 then
+          make v1 (app (l1, l2)) (app (h1, h2))
+        else
+          make v2 (app (n1, l2)) (app (n1, h2))
     in
     curry2 (M2.ymemo ~throwaway:binop_cache_throwaway ~size:binop_cache_size app)
 
@@ -259,10 +265,10 @@ module Make (V : Var) (P : Params) = struct
 
   let vars =
     let f f = function
-    | Zero | One ->
-      VarSet.empty
-    | Node (_, v, l, h) ->
-      VarSet.add v (VarSet.union (f l) (f h))
+      | Zero | One ->
+        VarSet.empty
+      | Node (_, v, l, h) ->
+        VarSet.add v (VarSet.union (f l) (f h))
     in
     (* the cache is only used for one call *)
     let g = M1.ymemo ~throwaway:vars_cache_throwaway ~size:vars_cache_size f in
@@ -270,16 +276,79 @@ module Make (V : Var) (P : Params) = struct
 
   let restrict var dec =
     let f f n = match n with
-    | (Zero | One) -> n
-    | Node (_, var', low, high)->
-      let cmp = V.compare var var' in
-      if cmp < 0 then (* var < var' *)
-        n
-      else if cmp = 0 then
-        if dec then high else low
-      else (* var > var' *)
-        make var' (f low) (f high)
+      | (Zero | One) -> n
+      | Node (_, var', low, high)->
+        let cmp = V.compare var var' in
+        if cmp < 0 then (* var < var' *)
+          n
+        else if cmp = 0 then
+          if dec then high else low
+        else (* var > var' *)
+          make var' (f low) (f high)
     in
     (* the cache is only used for one call *)
     M1.ymemo ~throwaway:restrict_cache_throwaway ~size:restrict_cache_size f
+
+  let prepend_all head tails =
+    List.rev_map (fun tail -> head :: tail) tails
+
+  let random_sat t =
+    let rec f acc = function
+      | Zero -> raise Not_found
+      | One -> acc
+      | Node (_, var, Zero, high) ->
+        f ((var, true) :: acc) high
+      | Node (_, var, low, Zero) ->
+        f ((var, false) :: acc) low
+      | Node (_, var, _, high) when Random.bool () ->
+          f ((var, true) :: acc) high
+      | Node (_, var, low, _) ->
+          f ((var, false) :: acc) low
+    in
+    f []
+
+  let any_sat =
+    let rec f acc = function
+      | Zero -> raise Not_found
+      | One -> acc
+      | Node (_, var, low, Zero) ->
+        f ((var, false) :: acc) low
+      | Node (_, var, _, high) ->
+        f ((var, true) :: acc) high
+    in
+    f []
+
+  let all_sat t =
+    let f f = function
+      | Zero -> []
+      | One -> [[]]
+      | Node (_, var, low, high) ->
+        let low = prepend_all (var, false) (f low) in
+        let high = prepend_all (var, true) (f high) in
+        List.rev_append low high
+    in
+    M1.ymemo ~throwaway:all_sat_cache_throwaway ~size:all_sat_cache_size f
+
+  let iter_sat f t =
+    let rec g acc = function
+      | Zero -> ()
+      | One -> f (List.rev acc)
+      | Node (_, var, low, high) ->
+        g ((var,true) :: acc) low;
+        g ((var,false) :: acc) high
+    in
+    g []
+
+  let exists_sat f t =
+    let rec g acc = function
+      | Zero -> false
+      | One -> f (List.rev acc)
+      | Node (_, var, low, high) ->
+        g ((var,true) :: acc) low || g ((var,false) :: acc) high
+    in
+    g []
+
+  let is_sat t = t != Zero
+  let is_tauto t = t == One
+
 end
