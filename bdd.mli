@@ -114,7 +114,7 @@ module Make (Var : Var) (P : Params) : sig
   val any_sat : t -> (Var.t * bool) list
 
   (** A random valid assignment. Raise [Not_found] if none. *)
-  val random_stat : t -> (Var.t * bool) list
+  val random_sat : t -> (Var.t * bool) list
 
   (** All valid assignment, i.e. DNF *)
   val all_sat : t -> (Var.t * bool) list list

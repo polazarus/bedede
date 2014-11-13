@@ -292,7 +292,7 @@ module Make (V : Var) (P : Params) = struct
   let prepend_all head tails =
     List.rev_map (fun tail -> head :: tail) tails
 
-  let random_sat t =
+  let random_sat =
     let rec f acc = function
       | Zero -> raise Not_found
       | One -> acc
@@ -318,7 +318,7 @@ module Make (V : Var) (P : Params) = struct
     in
     f []
 
-  let all_sat t =
+  let all_sat =
     let f f = function
       | Zero -> []
       | One -> [[]]
@@ -329,7 +329,7 @@ module Make (V : Var) (P : Params) = struct
     in
     M1.ymemo ~throwaway:all_sat_cache_throwaway ~size:all_sat_cache_size f
 
-  let iter_sat f t =
+  let iter_sat f =
     let rec g acc = function
       | Zero -> ()
       | One -> f (List.rev acc)
@@ -339,7 +339,7 @@ module Make (V : Var) (P : Params) = struct
     in
     g []
 
-  let exists_sat f t =
+  let exists_sat f =
     let rec g acc = function
       | Zero -> false
       | One -> f (List.rev acc)
